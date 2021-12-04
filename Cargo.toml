@@ -1,0 +1,20 @@
+[package]
+name = "cargo-pbuild"
+description = "Build and configuration profiles for Cargo"
+author = "Brendan Molloy <brendan@technocreatives.com>"
+version = "0.0.1"
+edition = "2021"
+license = "Apache-2.0 OR MIT"
+
+[dependencies]
+color-eyre = "0.5.11"
+gumdrop = "0.8.0"
+heck = "0.3.3"
+indexmap = "1.7.0"
+nova = "0.5.2"
+thiserror = "1.0.30"
+toml = { version = "0.5.8", features = ["preserve_order"] }
+uuid = { version = "0.8.2", optional = true }
+
+[features]
+default = ["uuid"]
