@@ -1,6 +1,6 @@
 use indexmap::IndexMap;
 use nova::newtype;
-use std::{ops::Deref, path::Path};
+use std::{fmt::Display, ops::Deref, path::Path};
 
 #[derive(Debug, Clone)]
 pub enum DependencyOp {
@@ -169,6 +169,24 @@ pub enum Value {
     Uuid(uuid::Uuid),
 }
 
+impl Display for Value {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Value::String(x) => Display::fmt(x, f),
+            Value::Bool(x) => Display::fmt(x, f),
+            Value::U8(x) => Display::fmt(x, f),
+            Value::U16(x) => Display::fmt(x, f),
+            Value::U32(x) => Display::fmt(x, f),
+            Value::U64(x) => Display::fmt(x, f),
+            Value::I8(x) => Display::fmt(x, f),
+            Value::I16(x) => Display::fmt(x, f),
+            Value::I32(x) => Display::fmt(x, f),
+            Value::I64(x) => Display::fmt(x, f),
+            Value::Uuid(x) => Display::fmt(x, f),
+        }
+    }
+}
+
 impl Value {
     pub fn default(ty: Type) -> Value {
         match ty {
@@ -252,11 +270,13 @@ impl PropSpec {
             })?;
 
         let default = match raw.get("default") {
-            Some(v) => Some(Value::new(ty, v).ok_or_else(|| FieldsError::InvalidFieldType {
-                field: name.to_string(),
-                key: "default",
-                ty: ty.as_str(),
-            })?),
+            Some(v) => Some(
+                Value::new(ty, v).ok_or_else(|| FieldsError::InvalidFieldType {
+                    field: name.to_string(),
+                    key: "default",
+                    ty: ty.as_str(),
+                })?,
+            ),
             None => None,
         };
 
@@ -515,5 +535,34 @@ impl Spec {
             .collect::<Result<IndexMap<_, _>, SpecError>>()?;
 
         Ok((name, types))
+    }
+}
+
+impl Display for Spec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.name)?;
+        f.write_str("\n\n")?;
+
+        for (tyidx, v) in self.fields.iter() {
+            let ty = &self.types[tyidx];
+            if ty.is_single {
+                f.write_str("config.")?;
+            }
+            f.write_str(tyidx)?;
+            f.write_str(":\n")?;
+            for (fk, fs) in v.iter() {
+                f.write_str("  ")?;
+                if !ty.is_single {
+                    f.write_str(&ty.key)?;
+                    f.write_str(".")?;
+                }
+                f.write_str(fk)?;
+                f.write_str(": ")?;
+                f.write_str(&fs.description)?;
+                f.write_str("\n")?;
+            }
+        }
+
+        Ok(())
     }
 }

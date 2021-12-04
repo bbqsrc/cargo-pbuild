@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{fmt::Display, path::Path};
 
 use crate::spec::{FieldKey, Spec, TypeIndex, TypeKey, Value};
 use indexmap::IndexMap;
@@ -57,14 +57,22 @@ impl Profile {
             .get("profile")
             .and_then(|x| x.get("bins"))
             .and_then(|x| x.as_array())
-            .map(|x| x.iter().map(|x| x.as_str().unwrap().to_string()).collect::<Vec<String>>())
+            .map(|x| {
+                x.iter()
+                    .map(|x| x.as_str().unwrap().to_string())
+                    .collect::<Vec<String>>()
+            })
             .unwrap_or_default();
 
         let libs = raw
             .get("profile")
             .and_then(|x| x.get("libs"))
             .and_then(|x| x.as_array())
-            .map(|x| x.iter().map(|x| x.as_str().unwrap().to_string()).collect::<Vec<String>>())
+            .map(|x| {
+                x.iter()
+                    .map(|x| x.as_str().unwrap().to_string())
+                    .collect::<Vec<String>>()
+            })
             .unwrap_or_default();
 
         if bins.is_empty() && libs.is_empty() {
@@ -75,7 +83,11 @@ impl Profile {
             .get("profile")
             .and_then(|x| x.get("features"))
             .and_then(|x| x.as_array())
-            .map(|x| x.iter().map(|x| x.as_str().unwrap().to_string()).collect::<Vec<String>>())
+            .map(|x| {
+                x.iter()
+                    .map(|x| x.as_str().unwrap().to_string())
+                    .collect::<Vec<String>>()
+            })
             .unwrap_or_default();
 
         let description = raw
@@ -131,7 +143,7 @@ impl Profile {
                                     (k.to_string(), v)
                                 })
                                 .collect::<IndexMap<_, _>>();
-                            
+
                             field_spec.properties.iter().for_each(|(k, v)| {
                                 if let Some(default) = v.default.as_ref() {
                                     if !props.contains_key(k) {
@@ -167,11 +179,20 @@ impl Profile {
 
         let mut out = IndexMap::new();
         for (ty, v) in self.config.iter() {
-            let tyspec = self.spec.types.iter().find(|(_, v)| &v.key == ty).unwrap().1;
-            
+            let tyspec = self
+                .spec
+                .types
+                .iter()
+                .find(|(_, v)| &v.key == ty)
+                .unwrap()
+                .1;
+
             for (ahh, brr) in v {
                 if tyspec.is_single {
-                    out.insert(format!("{}", ty).to_snake_case(), Value::String(ahh.to_string()));
+                    out.insert(
+                        format!("{}", ty).to_snake_case(),
+                        Value::String(ahh.to_string()),
+                    );
                 } else {
                     out.insert(format!("{}_{}", ty, ahh).to_snake_case(), Value::Bool(true));
                 }
@@ -218,8 +239,16 @@ impl Profile {
 
         for bin in self.bins.iter() {
             let mut o = vec![];
-            o.push("--bin".into());
-            o.push(bin.to_string());
+            if bin.contains("/") {
+                let mut chunks = bin.split("/");
+                o.push("-p".into());
+                o.push(chunks.next().unwrap().to_string());
+                o.push("--bin".into());
+                o.push(chunks.next().unwrap().to_string());
+            } else {
+                o.push("--bin".into());
+                o.push(bin.to_string());
+            }
             if !self.features.is_empty() {
                 o.push("--features".into());
                 o.push(format!("\"{}\"", self.features.join("\",\"")));
@@ -239,5 +268,69 @@ impl Profile {
         }
 
         out
+    }
+}
+
+impl Display for Profile {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.description)?;
+        f.write_str("\n\n")?;
+
+        let mut add_nl = false;
+
+        if !self.bins.is_empty() {
+            f.write_str("Binaries:\n")?;
+            for bin in self.bins.iter() {
+                f.write_fmt(format_args!("  {}\n", bin))?;
+            }
+            add_nl = true;
+        }
+
+        if !self.libs.is_empty() {
+            f.write_str("Libraries:\n")?;
+            for lib in self.libs.iter() {
+                f.write_fmt(format_args!("  {}\n", lib))?;
+            }
+            add_nl = true;
+        }
+
+        if !self.features.is_empty() {
+            f.write_str("Features:\n")?;
+            for feature in self.features.iter() {
+                f.write_fmt(format_args!("  {}\n", feature))?;
+            }
+            add_nl = true;
+        }
+
+        if add_nl {
+            f.write_str("\n")?;
+        }
+
+        for (tykey, v) in self.config.iter() {
+            for (fk, v) in v {
+                f.write_fmt(format_args!("{}.{}: enabled\n", &tykey, &fk))?;
+                if !v.is_empty() {
+                    for (pk, pv) in v {
+                        f.write_fmt(format_args!("  {}.{}.{} = {}\n", &tykey, &fk, pk, pv))?;
+                    }
+                }
+            }
+        }
+
+        f.write_str("\n")?;
+
+        f.write_str("Rust compiler flags:\n")?;
+        f.write_str("  ")?;
+        f.write_str(&self.rustc_cfg_flags().join(" "))?;
+        f.write_str("\n\n")?;
+
+        f.write_str("Cargo flags:\n")?;
+        for line in self.cargo_flags() {
+            f.write_str("  ")?;
+            f.write_str(&line.join(" "))?;
+            f.write_str("\n")?;
+        }
+
+        Ok(())
     }
 }
